@@ -1,0 +1,12 @@
+{
+  "name": "claude-telegram-notifications",
+  "version": "1.0.0",
+  "plugins": [
+    {
+      "name": "telegram-notifications",
+      "description": "Telegram notifications when Claude Code is idle or needs permission",
+      "version": "1.0.0",
+      "source": "./"
+    }
+  ]
+}

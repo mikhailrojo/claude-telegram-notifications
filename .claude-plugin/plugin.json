@@ -5,7 +5,8 @@
   "author": {
     "name": "Mikhail Stepanov"
   },
-  "repository": "https://github.com/misha/claude-telegram-notifications",
+  "repository": "https://github.com/mikhailrojo/claude-telegram-notifications",
   "license": "MIT",
-  "keywords": ["notifications", "telegram", "hooks"]
+  "keywords": ["notifications", "telegram", "hooks"],
+  "hooks": "./hooks/hooks.json"
 }

@@ -7,6 +7,5 @@
   },
   "repository": "https://github.com/mikhailrojo/claude-telegram-notifications",
   "license": "MIT",
-  "keywords": ["notifications", "telegram", "hooks"],
-  "hooks": "./hooks/hooks.json"
+  "keywords": ["notifications", "telegram", "hooks"]
 }

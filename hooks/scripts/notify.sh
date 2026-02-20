@@ -1,9 +1,18 @@
 #!/usr/bin/env python3
 import json
 import os
+import ssl
 import sys
 import urllib.request
 from pathlib import Path
+
+SSL_CONTEXT = ssl.create_default_context()
+try:
+    import certifi
+    SSL_CONTEXT.load_verify_locations(certifi.where())
+except Exception:
+    SSL_CONTEXT.check_hostname = False
+    SSL_CONTEXT.verify_mode = ssl.CERT_NONE
 
 BOT_TOKEN = os.environ.get("TG_BOT_TOKEN", "")
 CHAT_ID = os.environ.get("TG_CHAT_ID", "")
@@ -66,6 +75,6 @@ req = urllib.request.Request(
 )
 
 try:
-    urllib.request.urlopen(req, timeout=10)
+    urllib.request.urlopen(req, timeout=10, context=SSL_CONTEXT)
 except Exception:
     pass

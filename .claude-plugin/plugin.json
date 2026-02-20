@@ -1,7 +1,7 @@
 {
   "name": "telegram-notifications",
   "description": "Telegram notifications when Claude Code is idle or needs permission",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "author": {
     "name": "Mikhail Stepanov"
   },

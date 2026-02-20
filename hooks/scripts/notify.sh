@@ -1,84 +1,71 @@
-#!/usr/bin/env bash
-set -euo pipefail
+#!/usr/bin/env python3
+import json
+import os
+import sys
+import urllib.request
+from pathlib import Path
 
-BOT_TOKEN="${TG_BOT_TOKEN:-}"
-CHAT_ID="${TG_CHAT_ID:-}"
+BOT_TOKEN = os.environ.get("TG_BOT_TOKEN", "")
+CHAT_ID = os.environ.get("TG_CHAT_ID", "")
 
-if [[ -z "$BOT_TOKEN" || -z "$CHAT_ID" ]]; then
-  exit 0
-fi
+if not BOT_TOKEN or not CHAT_ID:
+    sys.exit(0)
 
-INPUT=$(cat)
+MAX_CLAUDE_MSG = 1000
 
-SESSION_ID=$(echo "$INPUT" | jq -r '.session_id // "unknown"')
-CWD=$(echo "$INPUT" | jq -r '.cwd // "unknown"')
-NOTIFICATION_TYPE=$(echo "$INPUT" | jq -r '.notification_type // "unknown"')
-MESSAGE=$(echo "$INPUT" | jq -r '.message // ""')
-TRANSCRIPT_PATH=$(echo "$INPUT" | jq -r '.transcript_path // ""')
+hook_input = json.loads(sys.stdin.read())
 
-PROJECT_NAME=$(basename "$CWD")
-SHORT_SESSION="${SESSION_ID:0:8}"
+session_id = hook_input.get("session_id", "unknown")
+cwd = hook_input.get("cwd", "unknown")
+notification_type = hook_input.get("notification_type", "unknown")
+message = hook_input.get("message", "")
+transcript_path = hook_input.get("transcript_path", "")
 
-MAX_CLAUDE_MSG=1000
+project_name = Path(cwd).name
+short_session = session_id[:8]
 
-reverse_file() {
-  if command -v tac >/dev/null 2>&1; then
-    tac "$1"
-  else
-    tail -r "$1"
-  fi
-}
+claude_message = ""
+if transcript_path and Path(transcript_path).is_file():
+    try:
+        with open(transcript_path, "r") as f:
+            lines = f.readlines()
+        for line in reversed(lines):
+            try:
+                entry = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            if entry.get("type") == "assistant":
+                parts = []
+                for block in entry.get("message", {}).get("content", []):
+                    if block.get("type") == "text":
+                        parts.append(block["text"])
+                claude_message = "\n".join(parts)[:MAX_CLAUDE_MSG]
+                break
+    except Exception:
+        pass
 
-CLAUDE_MESSAGE=""
-if [[ -n "$TRANSCRIPT_PATH" && -f "$TRANSCRIPT_PATH" ]]; then
-  LAST_ASSISTANT=$(reverse_file "$TRANSCRIPT_PATH" | jq -c 'select(.type == "assistant")' 2>/dev/null | head -1 || true)
-  if [[ -n "$LAST_ASSISTANT" ]]; then
-    CLAUDE_MESSAGE=$(echo "$LAST_ASSISTANT" \
-      | jq -r '.message.content[]? | select(.type == "text") | .text' 2>/dev/null \
-      | head -c "$MAX_CLAUDE_MSG" || true)
-  fi
-fi
+if notification_type == "idle_prompt":
+    text = f"Claude Code waiting for input\nProject: {project_name}\nSession: {short_session}"
+    if claude_message:
+        text += f"\n\n{claude_message}"
+elif notification_type == "permission_prompt":
+    safe_message = message[:300]
+    text = f"Permission required\nProject: {project_name}\nSession: {short_session}\n\n{safe_message}"
+    if claude_message:
+        text += f"\n\nClaude said:\n{claude_message}"
+else:
+    text = f"Claude Code: {message}"
+    if claude_message:
+        text += f"\n\n{claude_message}"
 
-case "$NOTIFICATION_TYPE" in
-  idle_prompt)
-    TEXT="Claude Code waiting for input
-Project: ${PROJECT_NAME}
-Session: ${SHORT_SESSION}"
-    if [[ -n "$CLAUDE_MESSAGE" ]]; then
-      TEXT="${TEXT}
+payload = json.dumps({"chat_id": CHAT_ID, "text": text}).encode()
+req = urllib.request.Request(
+    f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage",
+    data=payload,
+    headers={"Content-Type": "application/json"},
+)
 
-${CLAUDE_MESSAGE}"
-    fi
-    ;;
-  permission_prompt)
-    SAFE_MESSAGE=$(echo "$MESSAGE" | head -c 300)
-    TEXT="Permission required
-Project: ${PROJECT_NAME}
-Session: ${SHORT_SESSION}
-
-${SAFE_MESSAGE}"
-    if [[ -n "$CLAUDE_MESSAGE" ]]; then
-      TEXT="${TEXT}
-
-Claude said:
-${CLAUDE_MESSAGE}"
-    fi
-    ;;
-  *)
-    TEXT="Claude Code: ${MESSAGE}"
-    if [[ -n "$CLAUDE_MESSAGE" ]]; then
-      TEXT="${TEXT}
-
-${CLAUDE_MESSAGE}"
-    fi
-    ;;
-esac
-
-JSON=$(jq -nc --arg chat_id "$CHAT_ID" --arg text "$TEXT" '{chat_id: $chat_id, text: $text}')
-
-curl -s -X POST \
-  "https://api.telegram.org/bot${BOT_TOKEN}/sendMessage" \
-  -H "Content-Type: application/json" \
-  -d "$JSON" > /dev/null 2>&1 &
-
-exit 0
+try:
+    urllib.request.urlopen(req, timeout=10)
+except Exception:
+    pass
